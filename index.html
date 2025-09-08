@@ -1,1 +1,989 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Leaflet KML/KMZ Map Viewer</title>
+    
+    <!-- Leaflet CSS and JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- JSZip for KMZ support -->
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Sidebar Styles */
+        .sidebar {
+            width: 350px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            transition: transform 0.3s ease;
+        }
+
+        .sidebar.collapsed {
+            transform: translateX(-300px);
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            background: rgba(0,0,0,0.1);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .sidebar-header h1 {
+            font-size: 18px;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .sidebar-header p {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        .sidebar-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        /* Upload Area */
+        .upload-area {
+            border: 2px dashed rgba(255,255,255,0.3);
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .upload-area:hover,
+        .upload-area.drag-over {
+            border-color: #4CAF50;
+            background: rgba(76, 175, 80, 0.1);
+        }
+
+        .upload-area i {
+            font-size: 36px;
+            margin-bottom: 10px;
+            opacity: 0.7;
+        }
+
+        .upload-area p {
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .upload-area small {
+            opacity: 0.7;
+            font-size: 12px;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        /* Controls Section */
+        .controls-section {
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-label {
+            font-size: 12px;
+            margin-bottom: 5px;
+            display: block;
+            opacity: 0.9;
+        }
+
+        .control-input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 5px;
+            background: rgba(255,255,255,0.1);
+            color: white;
+            font-size: 12px;
+        }
+
+        .control-input::placeholder {
+            color: rgba(255,255,255,0.7);
+        }
+
+        .color-input {
+            width: 100%;
+            height: 35px;
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 5px;
+            background: transparent;
+            cursor: pointer;
+        }
+
+        .range-input {
+            width: 100%;
+            margin-bottom: 5px;
+        }
+
+        .range-value {
+            font-size: 11px;
+            text-align: center;
+            opacity: 0.8;
+        }
+
+        /* Layers List */
+        .layers-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .layer-item {
+            background: rgba(255,255,255,0.1);
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .layer-item:hover {
+            background: rgba(255,255,255,0.2);
+        }
+
+        .layer-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+
+        .layer-name {
+            font-size: 13px;
+            font-weight: bold;
+        }
+
+        .layer-controls {
+            display: flex;
+            gap: 5px;
+        }
+
+        .layer-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 10px;
+            transition: background 0.3s ease;
+        }
+
+        .layer-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .layer-checkbox {
+            margin-right: 8px;
+            transform: scale(1.2);
+        }
+
+        .layer-info {
+            font-size: 11px;
+            opacity: 0.8;
+            margin-top: 5px;
+        }
+
+        /* Map Container */
+        .map-container {
+            flex: 1;
+            position: relative;
+        }
+
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+
+        /* Toggle Button */
+        .toggle-sidebar {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1001;
+            background: white;
+            border: none;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+        }
+
+        .toggle-sidebar:hover {
+            background: #f0f0f0;
+        }
+
+        /* Notification */
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #4CAF50;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+            z-index: 2000;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification.error {
+            background: #f44336;
+        }
+
+        /* Loading Spinner */
+        .loading {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+            background: rgba(255,255,255,0.9);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 100%;
+                position: absolute;
+                height: 100%;
+                transform: translateX(-100%);
+            }
+
+            .sidebar.show {
+                transform: translateX(0);
+            }
+
+            .map-container {
+                width: 100%;
+            }
+        }
+
+        /* Custom Popup Styles */
+        .leaflet-popup-content {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .popup-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 10px;
+            margin: -10px -10px 10px -10px;
+            border-radius: 5px 5px 0 0;
+            font-weight: bold;
+        }
+
+        .popup-content {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .popup-row {
+            display: flex;
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .popup-row:last-child {
+            border-bottom: none;
+        }
+
+        .popup-label {
+            font-weight: bold;
+            min-width: 80px;
+            margin-right: 10px;
+            color: #555;
+        }
+
+        .popup-value {
+            flex: 1;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h1>
+                    <i class="fas fa-map-marked-alt"></i>
+                    KML/KMZ Viewer
+                </h1>
+                <p>Advanced mapping with styling controls</p>
+            </div>
+
+            <div class="sidebar-content">
+                <!-- Upload Area -->
+                <div class="upload-area" id="uploadArea">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <p>Drag & drop KML/KMZ files here</p>
+                    <p>or <strong>click to browse</strong></p>
+                    <small>Supports single and multiple files</small>
+                    <input type="file" id="fileInput" class="file-input" multiple accept=".kml,.kmz">
+                </div>
+
+                <!-- Styling Controls -->
+                <div class="controls-section">
+                    <div class="section-title">
+                        <i class="fas fa-palette"></i>
+                        Styling Controls
+                    </div>
+                    
+                    <div class="control-group">
+                        <label class="control-label">Line Color</label>
+                        <input type="color" id="lineColor" class="color-input" value="#3388ff">
+                    </div>
+
+                    <div class="control-group">
+                        <label class="control-label">Fill Color</label>
+                        <input type="color" id="fillColor" class="color-input" value="#3388ff">
+                    </div>
+
+                    <div class="control-group">
+                        <label class="control-label">Line Weight</label>
+                        <input type="range" id="lineWeight" class="range-input" min="1" max="10" value="3">
+                        <div class="range-value" id="lineWeightValue">3px</div>
+                    </div>
+
+                    <div class="control-group">
+                        <label class="control-label">Fill Opacity</label>
+                        <input type="range" id="fillOpacity" class="range-input" min="0" max="1" step="0.1" value="0.2">
+                        <div class="range-value" id="fillOpacityValue">0.2</div>
+                    </div>
+
+                    <div class="control-group">
+                        <label class="control-label">Line Opacity</label>
+                        <input type="range" id="lineOpacity" class="range-input" min="0" max="1" step="0.1" value="1">
+                        <div class="range-value" id="lineOpacityValue">1.0</div>
+                    </div>
+                </div>
+
+                <!-- Layers Management -->
+                <div class="controls-section">
+                    <div class="section-title">
+                        <i class="fas fa-layers"></i>
+                        Loaded Layers
+                    </div>
+                    <div class="layers-list" id="layersList">
+                        <p style="opacity: 0.7; font-size: 12px; text-align: center;">No layers loaded</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Map Container -->
+        <div class="map-container">
+            <button class="toggle-sidebar" id="toggleSidebar">
+                <i class="fas fa-bars"></i>
+            </button>
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <div>Loading KML data...</div>
+            </div>
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <!-- Notification -->
+    <div class="notification" id="notification"></div>
+
+    <script>
+        // Global variables
+        let map;
+        let loadedLayers = [];
+        let layerCounter = 0;
+        let currentStyle = {
+            color: '#3388ff',
+            fillColor: '#3388ff',
+            weight: 3,
+            fillOpacity: 0.2,
+            opacity: 1
+        };
+
+        // Initialize map
+        function initMap() {
+            map = L.map('map').setView([0, 0], 2);
+            
+            // Add tile layers
+            const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            });
+
+            const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: '© Esri'
+            });
+
+            const terrain = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenTopoMap contributors'
+            });
+
+            // Add default layer
+            osm.addTo(map);
+
+            // Layer control
+            const baseLayers = {
+                "OpenStreetMap": osm,
+                "Satellite": satellite,
+                "Terrain": terrain
+            };
+
+            L.control.layers(baseLayers).addTo(map);
+
+            // Add scale control
+            L.control.scale().addTo(map);
+        }
+
+        // Show notification
+        function showNotification(message, isError = false) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${isError ? 'error' : ''} show`;
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+
+        // Show/hide loading
+        function toggleLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
+
+        // Parse KMZ file
+        async function parseKMZ(file) {
+            try {
+                const zip = new JSZip();
+                const contents = await zip.loadAsync(file);
+                
+                let kmlContent = null;
+                for (let filename in contents.files) {
+                    if (filename.endsWith('.kml')) {
+                        kmlContent = await contents.files[filename].async('text');
+                        break;
+                    }
+                }
+                
+                if (!kmlContent) {
+                    throw new Error('No KML file found in KMZ archive');
+                }
+                
+                return kmlContent;
+            } catch (error) {
+                throw new Error(`Error parsing KMZ: ${error.message}`);
+            }
+        }
+
+        // Parse KML using custom parser
+        function parseKML(kmlString) {
+            const parser = new DOMParser();
+            const kmlDoc = parser.parseFromString(kmlString, 'application/xml');
+            
+            if (kmlDoc.getElementsByTagName('parsererror').length > 0) {
+                throw new Error('Invalid KML format');
+            }
+
+            const features = [];
+            const placemarks = kmlDoc.getElementsByTagName('Placemark');
+            
+            for (let i = 0; i < placemarks.length; i++) {
+                const placemark = placemarks[i];
+                const feature = parsePlacemark(placemark);
+                if (feature) {
+                    features.push(feature);
+                }
+            }
+            
+            return features;
+        }
+
+        // Parse individual placemark
+        function parsePlacemark(placemark) {
+            const nameElement = placemark.getElementsByTagName('name')[0];
+            const descElement = placemark.getElementsByTagName('description')[0];
+            
+            const properties = {
+                name: nameElement ? nameElement.textContent : 'Untitled',
+                description: descElement ? descElement.textContent : ''
+            };
+
+            // Extract extended data
+            const extendedData = placemark.getElementsByTagName('ExtendedData')[0];
+            if (extendedData) {
+                const dataElements = extendedData.getElementsByTagName('Data');
+                for (let j = 0; j < dataElements.length; j++) {
+                    const dataElement = dataElements[j];
+                    const name = dataElement.getAttribute('name');
+                    const value = dataElement.getElementsByTagName('value')[0];
+                    if (name && value) {
+                        properties[name] = value.textContent;
+                    }
+                }
+            }
+
+            // Parse geometry
+            let geometry = null;
+            
+            // Check for Point
+            const point = placemark.getElementsByTagName('Point')[0];
+            if (point) {
+                const coordinates = point.getElementsByTagName('coordinates')[0];
+                if (coordinates) {
+                    const coords = coordinates.textContent.trim().split(',');
+                    if (coords.length >= 2) {
+                        geometry = {
+                            type: 'Point',
+                            coordinates: [parseFloat(coords[0]), parseFloat(coords[1])]
+                        };
+                    }
+                }
+            }
+
+            // Check for LineString
+            const lineString = placemark.getElementsByTagName('LineString')[0];
+            if (lineString) {
+                const coordinates = lineString.getElementsByTagName('coordinates')[0];
+                if (coordinates) {
+                    const coordString = coordinates.textContent.trim();
+                    const coordPairs = coordString.split(/\s+/);
+                    const coords = [];
+                    
+                    coordPairs.forEach(pair => {
+                        const parts = pair.split(',');
+                        if (parts.length >= 2) {
+                            coords.push([parseFloat(parts[1]), parseFloat(parts[0])]);
+                        }
+                    });
+                    
+                    if (coords.length > 0) {
+                        geometry = {
+                            type: 'LineString',
+                            coordinates: coords
+                        };
+                    }
+                }
+            }
+
+            // Check for Polygon
+            const polygon = placemark.getElementsByTagName('Polygon')[0];
+            if (polygon) {
+                const outerBoundary = polygon.getElementsByTagName('outerBoundaryIs')[0];
+                if (outerBoundary) {
+                    const linearRing = outerBoundary.getElementsByTagName('LinearRing')[0];
+                    if (linearRing) {
+                        const coordinates = linearRing.getElementsByTagName('coordinates')[0];
+                        if (coordinates) {
+                            const coordString = coordinates.textContent.trim();
+                            const coordPairs = coordString.split(/\s+/);
+                            const coords = [];
+                            
+                            coordPairs.forEach(pair => {
+                                const parts = pair.split(',');
+                                if (parts.length >= 2) {
+                                    coords.push([parseFloat(parts[1]), parseFloat(parts[0])]);
+                                }
+                            });
+                            
+                            if (coords.length > 2) {
+                                geometry = {
+                                    type: 'Polygon',
+                                    coordinates: [coords]
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (geometry) {
+                return {
+                    type: 'Feature',
+                    properties: properties,
+                    geometry: geometry
+                };
+            }
+            
+            return null;
+        }
+
+        // Create Leaflet layer from GeoJSON-like features
+        function createLayerFromFeatures(features) {
+            const layerGroup = L.layerGroup();
+            
+            features.forEach(feature => {
+                let layer = null;
+                
+                if (feature.geometry.type === 'Point') {
+                    layer = L.marker([feature.geometry.coordinates[1], feature.geometry.coordinates[0]]);
+                } else if (feature.geometry.type === 'LineString') {
+                    layer = L.polyline(feature.geometry.coordinates, currentStyle);
+                } else if (feature.geometry.type === 'Polygon') {
+                    layer = L.polygon(feature.geometry.coordinates, currentStyle);
+                }
+                
+                if (layer) {
+                    // Create popup content
+                    const popupContent = createPopupContent(feature.properties);
+                    layer.bindPopup(popupContent, {
+                        maxWidth: 300,
+                        className: 'custom-popup'
+                    });
+                    
+                    layerGroup.addLayer(layer);
+                }
+            });
+            
+            return layerGroup;
+        }
+
+        // Create custom popup content
+        function createPopupContent(properties) {
+            if (Object.keys(properties).length === 0) {
+                return '<div class="popup-header">Feature Information</div><p>No additional data available</p>';
+            }
+
+            let content = '<div class="popup-header">Feature Information</div><div class="popup-content">';
+            
+            for (const [key, value] of Object.entries(properties)) {
+                if (value && value.toString().trim() !== '') {
+                    content += `
+                        <div class="popup-row">
+                            <div class="popup-label">${key}:</div>
+                            <div class="popup-value">${value}</div>
+                        </div>
+                    `;
+                }
+            }
+            
+            content += '</div>';
+            return content;
+        }
+
+        // Apply styling to layer
+        function applyLayerStyle(layer, style) {
+            layer.eachLayer(function(sublayer) {
+                if (sublayer.setStyle) {
+                    sublayer.setStyle(style);
+                } else if (sublayer.eachLayer) {
+                    sublayer.eachLayer(function(subsublayer) {
+                        if (subsublayer.setStyle) {
+                            subsublayer.setStyle(style);
+                        }
+                    });
+                }
+            });
+        }
+
+        // Load KML/KMZ file
+        async function loadKMLFile(file) {
+            try {
+                toggleLoading(true);
+                
+                let kmlContent;
+                if (file.name.toLowerCase().endsWith('.kmz')) {
+                    kmlContent = await parseKMZ(file);
+                } else {
+                    kmlContent = await file.text();
+                }
+
+                // Parse KML to features
+                const features = parseKML(kmlContent);
+                
+                if (features.length === 0) {
+                    throw new Error('No valid features found in KML file');
+                }
+
+                // Create layer from features
+                const layer = createLayerFromFeatures(features);
+
+                layerCounter++;
+                const layerInfo = {
+                    id: layerCounter,
+                    name: file.name,
+                    layer: layer,
+                    visible: true,
+                    style: { ...currentStyle },
+                    featureCount: features.length
+                };
+
+                // Add to map and store
+                layer.addTo(map);
+                loadedLayers.push(layerInfo);
+
+                // Fit map to layer bounds
+                if (layer.getLayers().length > 0) {
+                    const group = new L.featureGroup(layer.getLayers());
+                    map.fitBounds(group.getBounds(), { padding: [20, 20] });
+                }
+                
+                updateLayersList();
+                toggleLoading(false);
+                showNotification(`Successfully loaded ${file.name} (${features.length} features)`);
+
+            } catch (error) {
+                toggleLoading(false);
+                showNotification(`Error processing ${file.name}: ${error.message}`, true);
+                console.error('KML loading error:', error);
+            }
+        }
+
+        // Update layers list in sidebar
+        function updateLayersList() {
+            const layersList = document.getElementById('layersList');
+            
+            if (loadedLayers.length === 0) {
+                layersList.innerHTML = '<p style="opacity: 0.7; font-size: 12px; text-align: center;">No layers loaded</p>';
+                return;
+            }
+
+            layersList.innerHTML = '';
+            loadedLayers.forEach(layerInfo => {
+                const layerItem = document.createElement('div');
+                layerItem.className = 'layer-item';
+                layerItem.innerHTML = `
+                    <div class="layer-header">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="checkbox" class="layer-checkbox" ${layerInfo.visible ? 'checked' : ''} 
+                                   onchange="toggleLayer(${layerInfo.id})">
+                            <span class="layer-name">${layerInfo.name}</span>
+                        </label>
+                        <div class="layer-controls">
+                            <button class="layer-btn" onclick="zoomToLayer(${layerInfo.id})" title="Zoom to layer">
+                                <i class="fas fa-search-plus"></i>
+                            </button>
+                            <button class="layer-btn" onclick="styleLayer(${layerInfo.id})" title="Apply current style">
+                                <i class="fas fa-palette"></i>
+                            </button>
+                            <button class="layer-btn" onclick="removeLayer(${layerInfo.id})" title="Remove layer">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="layer-info">
+                        Features: ${layerInfo.featureCount} | 
+                        Style: ${layerInfo.style.color}
+                    </div>
+                `;
+                layersList.appendChild(layerItem);
+            });
+        }
+
+        // Toggle layer visibility
+        function toggleLayer(layerId) {
+            const layerInfo = loadedLayers.find(l => l.id === layerId);
+            if (layerInfo) {
+                if (layerInfo.visible) {
+                    map.removeLayer(layerInfo.layer);
+                    layerInfo.visible = false;
+                } else {
+                    map.addLayer(layerInfo.layer);
+                    layerInfo.visible = true;
+                }
+            }
+        }
+
+        // Zoom to layer
+        function zoomToLayer(layerId) {
+            const layerInfo = loadedLayers.find(l => l.id === layerId);
+            if (layerInfo && layerInfo.layer.getLayers().length > 0) {
+                const group = new L.featureGroup(layerInfo.layer.getLayers());
+                map.fitBounds(group.getBounds(), { padding: [20, 20] });
+            }
+        }
+
+        // Apply current style to specific layer
+        function styleLayer(layerId) {
+            const layerInfo = loadedLayers.find(l => l.id === layerId);
+            if (layerInfo) {
+                applyLayerStyle(layerInfo.layer, currentStyle);
+                layerInfo.style = { ...currentStyle };
+                updateLayersList();
+                showNotification(`Style applied to ${layerInfo.name}`);
+            }
+        }
+
+        // Remove layer
+        function removeLayer(layerId) {
+            const layerIndex = loadedLayers.findIndex(l => l.id === layerId);
+            if (layerIndex !== -1) {
+                const layerInfo = loadedLayers[layerIndex];
+                map.removeLayer(layerInfo.layer);
+                loadedLayers.splice(layerIndex, 1);
+                updateLayersList();
+                showNotification(`Removed ${layerInfo.name}`);
+            }
+        }
+
+        // Update current style from controls
+        function updateCurrentStyle() {
+            currentStyle = {
+                color: document.getElementById('lineColor').value,
+                fillColor: document.getElementById('fillColor').value,
+                weight: parseInt(document.getElementById('lineWeight').value),
+                fillOpacity: parseFloat(document.getElementById('fillOpacity').value),
+                opacity: parseFloat(document.getElementById('lineOpacity').value)
+            };
+        }
+
+        // Initialize event listeners
+        function initEventListeners() {
+            // File input
+            const fileInput = document.getElementById('fileInput');
+            const uploadArea = document.getElementById('uploadArea');
+
+            fileInput.addEventListener('change', function(e) {
+                const files = Array.from(e.target.files);
+                files.forEach(file => {
+                    if (file.name.toLowerCase().endsWith('.kml') || file.name.toLowerCase().endsWith('.kmz')) {
+                        loadKMLFile(file);
+                    } else {
+                        showNotification(`Unsupported file type: ${file.name}`, true);
+                    }
+                });
+                // Reset input
+                fileInput.value = '';
+            });
+
+            // Drag and drop
+            uploadArea.addEventListener('click', () => fileInput.click());
+            
+            uploadArea.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                uploadArea.classList.add('drag-over');
+            });
+
+            uploadArea.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                uploadArea.classList.remove('drag-over');
+            });
+
+            uploadArea.addEventListener('drop', function(e) {
+                e.preventDefault();
+                uploadArea.classList.remove('drag-over');
+                
+                const files = Array.from(e.dataTransfer.files);
+                files.forEach(file => {
+                    if (file.name.toLowerCase().endsWith('.kml') || file.name.toLowerCase().endsWith('.kmz')) {
+                        loadKMLFile(file);
+                    } else {
+                        showNotification(`Unsupported file type: ${file.name}`, true);
+                    }
+                });
+            });
+
+            // Style controls
+            document.getElementById('lineColor').addEventListener('change', updateCurrentStyle);
+            document.getElementById('fillColor').addEventListener('change', updateCurrentStyle);
+            document.getElementById('lineWeight').addEventListener('input', function() {
+                updateCurrentStyle();
+                document.getElementById('lineWeightValue').textContent = this.value + 'px';
+            });
+            document.getElementById('fillOpacity').addEventListener('input', function() {
+                updateCurrentStyle();
+                document.getElementById('fillOpacityValue').textContent = this.value;
+            });
+            document.getElementById('lineOpacity').addEventListener('input', function() {
+                updateCurrentStyle();
+                document.getElementById('lineOpacityValue').textContent = this.value;
+            });
+
+            // Sidebar toggle
+            document.getElementById('toggleSidebar').addEventListener('click', function() {
+                const sidebar = document.getElementById('sidebar');
+                if (window.innerWidth <= 768) {
+                    sidebar.classList.toggle('show');
+                } else {
+                    sidebar.classList.toggle('collapsed');
+                }
+            });
+        }
+
+        // Initialize application
+        document.addEventListener('DOMContentLoaded', function() {
+            initMap();
+            initEventListeners();
+            updateCurrentStyle();
+            
+            // Welcome message
+            setTimeout(() => {
+                showNotification('Welcome! Drag and drop KML/KMZ files to get started.');
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
